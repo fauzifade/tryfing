@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan Absensi - FingRec</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f4f6f9; padding-top: 20px; }
+        .card { box-shadow: 0 4px 6px rgba(0,0,0,0.1); border: none; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 shadow-sm">
+    <div class="container-fluid px-4">
+        <a class="navbar-brand fw-bold" href="#">🖐️ FingRec</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item"><a class="nav-link" href="pegawai.html">Master Pegawai</a></li>
+                <li class="nav-item"><a class="nav-link" id="nav-distribusi" href="distribusi.html">Distribusi Akses</a></li>
+                <li class="nav-item"><a class="nav-link" href="log_absensi.html">Log Absensi</a></li>
+                <li class="nav-item"><a class="nav-link active" href="laporan.html">Laporan</a></li>
+            </ul>
+            <div class="d-flex align-items-center">
+                <span id="user-info" class="text-white me-3 fw-bold small"></span>
+                <button class="btn btn-sm btn-danger fw-bold" onclick="logout()">🚪 Logout</button>
+            </div>
+        </div>
+    </div>
+</nav>
+
+<script>
+    const userSession = JSON.parse(localStorage.getItem('userFingrec'));
+    if (!userSession) {
+        alert('⚠️ Anda harus login terlebih dahulu!');
+        window.location.href = 'index.html';
+    } else {
+        document.getElementById('user-info').innerHTML = `Halo, ${userSession.nama} <span class="badge bg-primary ms-1">${userSession.role}</span>`;
+        if (userSession.role === 'Staff') {
+            alert('❌ Akses Ditolak!');
+            window.location.href = 'index.html';
+        }
+        if (userSession.role === 'Admin') {
+            document.getElementById('nav-distribusi').style.display = 'none';
+        }
+    }
+    function logout() {
+        if (confirm("Apakah Anda yakin ingin keluar?")) {
+            localStorage.removeItem('userFingrec');
+            window.location.href = 'index.html';
+        }
+    }
+</script>
+<div class="container px-4">
+    <h2 class="mb-4">📄 Laporan Absensi Pegawai</h2>
+
+    <div class="card bg-white mb-4">
+        <div class="card-body">
+            <div class="row g-3 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small">Tanggal Mulai</label>
+                    <input type="date" id="tgl-mulai" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small">Tanggal Akhir</label>
+                    <input type="date" id="tgl-akhir" class="form-control">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-bold small">Biro / Unit (Opsional)</label>
+                    <input type="text" id="filter-biro" class="form-control" placeholder="Semua Biro">
+                </div>
+                <div class="col-md-3">
+                    <button class="btn btn-primary w-100 fw-bold" onclick="generateLaporan()">🔍 Tarik Laporan</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+            <strong class="fs-5">📊 Hasil Rekapitulasi</strong>
+            <button class="btn btn-sm btn-success fw-bold" onclick="downloadCSV()" id="btn-export" style="display: none;">
+                📥 Unduh Excel (CSV)
+            </button>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Tanggal</th>
+                            <th>Jam Scan</th>
+                            <th>NIY</th>
+                            <th>Nama Lengkap</th>
+                            <th>Biro</th>
+                            <th class="text-center">Keterangan</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabel-laporan">
+                        <tr><td colspan="6" class="text-center py-4 text-muted">Silakan tentukan filter tanggal dan klik "Tarik Laporan".</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Set default tanggal hari ini di input form
+    const hariIni = new Date().toISOString().split('T')[0];
+    document.getElementById('tgl-mulai').value = hariIni;
+    document.getElementById('tgl-akhir').value = hariIni;
+
+    let dataLaporanGlobal = []; // Buat nyimpen data sementara buat di-export ke CSV
+
+    // ==========================================
+    // 1. FUNGSI TARIK DATA LAPORAN
+    // ==========================================
+    async function generateLaporan() {
+        const tglMulai = document.getElementById('tgl-mulai').value;
+        const tglAkhir = document.getElementById('tgl-akhir').value;
+        const biro = document.getElementById('filter-biro').value;
+
+        if (!tglMulai || !tglAkhir) {
+            alert("⚠️ Tanggal Mulai dan Akhir wajib diisi!");
+            return;
+        }
+
+        const tbody = document.getElementById('tabel-laporan');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4">⏳ Sedang menarik data...</td></tr>';
+        document.getElementById('btn-export').style.display = 'none';
+
+        try {
+            // Panggil API dengan query URL
+            const url = `/api/laporan?tgl_mulai=${tglMulai}&tgl_akhir=${tglAkhir}&biro=${encodeURIComponent(biro)}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            
+            dataLaporanGlobal = data; // Simpan ke memori global
+            tbody.innerHTML = ''; 
+
+            if(data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 fw-bold text-danger">Tidak ada data absensi pada rentang tanggal tersebut.</td></tr>';
+                return;
+            }
+
+            // Munculin tombol download kalau datanya ada
+            document.getElementById('btn-export').style.display = 'inline-block';
+
+            data.forEach(row => {
+                // Konversi format tanggal YYYY-MM-DD ke format lokal (DD/MM/YYYY)
+                const tglFormat = new Date(row.tanggal).toLocaleDateString('id-ID');
+                
+                let badgeClass = 'text-success fw-bold';
+                if (row.jenis === 'Login Late') badgeClass = 'text-warning fw-bold';
+                else if (row.jenis === 'Logout') badgeClass = 'text-primary fw-bold';
+
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-3">${tglFormat}</td>
+                    <td class="fw-bold">${row.jam}</td>
+                    <td>${row.niy}</td>
+                    <td>${row.nama}</td>
+                    <td>${row.biro}</td>
+                    <td>${row.jenis}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        } catch (error) {
+            console.error("Gagal menarik laporan:", error);
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger fw-bold">❌ Gagal terhubung ke server.</td></tr>';
+        }
+    }
+
+    // ==========================================
+    // 2. FUNGSI EXPORT KE EXCEL (CSV)
+    // ==========================================
+    function downloadCSV() {
+        if (dataLaporanGlobal.length === 0) return;
+
+        // Bikin Header CSV
+        let csvContent = "Tanggal,Jam Scan,NIY,Nama Lengkap,Biro/Unit,Keterangan\n";
+
+        // Looping data dan masukin ke format CSV
+        dataLaporanGlobal.forEach(row => {
+            const tglFormat = new Date(row.tanggal).toLocaleDateString('id-ID');
+            // Tambahkan kutip biar kalau ada nama/biro yang pakai koma nggak merusak kolom
+            const baris = `"${tglFormat}","${row.jam}","${row.niy}","${row.nama}","${row.biro}","${row.jenis}"`;
+            csvContent += baris + "\n";
+        });
+
+        // Bikin file virtual dan trigger download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        const url = URL.createObjectURL(blob);
+        
+        link.setAttribute("href", url);
+        link.setAttribute("download", `Laporan_Absensi_FingRec.csv`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

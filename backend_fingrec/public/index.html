@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FingRec Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script> 
+</head>
+<body class="bg-gray-100 p-10 font-sans">
+
+    <div class="max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+        <h1 class="text-2xl font-bold mb-6 text-gray-800">FingRec Web Dashboard 🖐️</h1>
+        
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="p-4 border rounded bg-gray-50">
+                <h2 class="font-semibold mb-2">Register Jari Baru</h2>
+                <input type="number" id="inputId" placeholder="Masukkan ID (1-127)" class="border p-2 rounded w-full mb-2">
+                <button onclick="kirimRegister()" class="bg-blue-600 text-white px-4 py-2 rounded w-full hover:bg-blue-700">Mulai Register</button>
+            </div>
+
+            <div class="p-4 border rounded bg-gray-50 flex flex-col justify-center">
+                <h2 class="font-semibold mb-2">Testing / Absen</h2>
+                <button onclick="kirimLogin()" class="bg-green-600 text-white px-4 py-2 rounded w-full hover:bg-green-700 h-full">Mulai Login (Scan Jari)</button>
+            </div>
+        </div>
+
+        <h2 class="font-semibold mb-2 text-gray-700">Live Status (Pengganti Terminal)</h2>
+        <div id="terminal" class="bg-gray-900 text-green-400 p-4 rounded h-64 overflow-y-auto font-mono text-sm shadow-inner">
+            Menunggu koneksi ke alat...
+        </div>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        const terminal = document.getElementById('terminal');
+
+        // Terima data live dari Node.js (MQTT) dan print ke box hitam
+        socket.on('log_terminal', (pesan) => {
+            const waktu = new Date().toLocaleTimeString();
+            terminal.innerHTML += `<br>[${waktu}] ${pesan}`;
+            terminal.scrollTop = terminal.scrollHeight; // Auto scroll ke bawah
+        });
+
+        function kirimRegister() {
+            const id = document.getElementById('inputId').value;
+            if(!id) return alert("Isi ID-nya dulu ngab!");
+            socket.emit('kirim_perintah', `register ${id}`);
+        }
+
+        function kirimLogin() {
+            socket.emit('kirim_perintah', 'login');
+        }
+    </script>
+</body>
+</html>
