@@ -1,352 +1,209 @@
 const mqtt = require('mqtt');
-const mysql = require('mysql2'); // Nanti kita manfaatin fitur promise() dari sini
 const express = require('express');
-const cors = require('cors');
-
+const path = require('path');
+const mysql = require('mysql2/promise');
 const app = express();
-app.use(cors());
-app.use(express.json());
-app.use(express.static(__dirname));
-const PORT = 3000;
+const port = 3000;
 
-// ==========================================
-// 1. KONFIGURASI DATABASE MYSQL
-// ==========================================
-const db = mysql.createConnection({
+// ====================== KONFIGURASI DATABASE BARU ======================
+const dbConfig = {
     host: 'localhost',
-    user: 'xfzy',
-    password: '634117',
-    database: 'tryfing'
-});
+    user: 'xfzy',           // Ganti jika beda
+    password: '634117', // Ganti dengan password MySQL Anda
+    database: 'tryfing'     // Pastikan nama databasenya sesuai
+};
 
-db.connect((err) => {
-    if (err) console.error('❌ Error koneksi MySQL:', err);
-    else console.log('✅ Terhubung ke database MySQL [tryfing]');
-});
+const pool = mysql.createPool(dbConfig);
 
-// ==========================================
-// 2. KONFIGURASI MQTT BROKER
-// ==========================================
-const mqttClient = mqtt.connect('mqtt://localhost:1883', {
-    username: 'esp32user',
-    password: 'passwordku123'
+// ====================== KONFIGURASI MQTT ======================
+const MQTT_BROKER = 'mqtt://127.0.0.1'; 
+const MQTT_USER   = 'esp32user';
+const MQTT_PASS   = 'passwordku123';
+
+// Variabel ini sekarang akan menyimpan 'employee.id' (Primary Key), bukan UUID/NIY lagi
+let sesiRegistrasiAktif_EmpId = null; 
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+const mqttClient = mqtt.connect(MQTT_BROKER, {
+    username: MQTT_USER,
+    password: MQTT_PASS,
+    clientId: 'NodeJS-Backend'
 });
 
 mqttClient.on('connect', () => {
-    console.log('✅ Terhubung ke MQTT Broker Mosquitto');
-    mqttClient.subscribe('fingerprint/+/register');
-    mqttClient.subscribe('fingerprint/+/login');
+    console.log('✅ Server Backend Terhubung ke MQTT Broker!');
+    mqttClient.subscribe('absensi/+/login');
+    mqttClient.subscribe('absensi/+/register');
+    mqttClient.subscribe('absensi/+/status');
 });
 
-// ==========================================
-// 3. STATE MEMORI NODE.JS (BUFFER REGISTER)
-// ==========================================
-let pendingNIY = null; 
+// ====================== MENERIMA PESAN DARI ESP32 ======================
+mqttClient.on('message', async (topic, message) => {
+    const payload = message.toString();
+    const topicParts = topic.split('/');
+    const sensorId = topicParts[1];
+    const action = topicParts[2];
 
-// ==========================================
-// 4. MENANGANI PESAN MASUK (REGISTER & LOGIN)
-// ==========================================
-mqttClient.on('message', (topic, message) => {
-    const rawMessage = message.toString();
-    console.log(`\n📥 Pesan masuk di topik [${topic}]: ${rawMessage}`);
-
-    let data = {};
-    const sensor_id = topic.split('/')[1];
-
-    // --- LOGIKA BARU: BISA BACA JSON MAUPUN TEKS BIASA ---
-    if (rawMessage.startsWith('{')) {
-        // Kalau formatnya JSON
-        data = JSON.parse(rawMessage);
-    } 
-    else if (rawMessage.includes('LOGIN_SUKSES')) {
-        // Kalau formatnya teks "LOGIN_SUKSES|ID:2|CONF:106"
-        // Kita pecah teksnya pakai pemisah "|"
-        const parts = rawMessage.split('|'); 
-        const idPart = parts[1].split(':'); // Ambil "ID:2" lalu pecah jadi ["ID", "2"]
-        
-        data = {
-            sensor: sensor_id,
-            id: parseInt(idPart[1]) // Ambil angka 2-nya
-        };
-        console.log(`🔍 Berhasil membedah teks manual: Sensor ${sensor_id}, ID ${data.id}`);
-    } 
-    else {
-        // Kalau beneran cuma pesan status biasa
-        console.log(`⚠️ Pesan Status dari Alat: ${rawMessage}`);
-        mqttClient.publish(`fingerprint/${sensor_id}/status`, rawMessage);
-        return; 
-    }
-
-    // --- LANJUT KE PROSES DATABASE (Sama kayak sebelumnya) ---
     try {
-        if (topic.includes('/register')) {
-            const template = data.template;
-            
-            console.log(`\n🔍 Menerima Template Jari dari ESP32...`);
-            console.log(`📌 Mengecek antrian NIY... (Isi pendingNIY sekarang: ${pendingNIY})`);
+        if (!payload.startsWith('{')) return; 
+        const data = JSON.parse(payload);
 
-            if (pendingNIY !== null) {
-                console.log(`✅ Cocok! Menyimpan jari ini untuk NIY: ${pendingNIY}`);
+        // ---------------------------------------------------------
+        // 1. ABSENSI (LOGIN) -> Sesuaikan dengan Tabel absensi_history
+        // ---------------------------------------------------------
+        if (action === 'login') {
+            const idJari = data.template_id; // Ini adalah 'server_id' di tabel fingerprint
+            const topicBalasan = `absensi/${sensorId}/display`;
+
+            // Cari nama pegawai berdasarkan server_id (ID di ESP32)
+            const [rows] = await pool.query(
+                `SELECT e.id as emp_id, e.name 
+                 FROM fingerprint f 
+                 JOIN employee e ON f.employee_id = e.id 
+                 WHERE f.server_id = ?`, 
+                 [idJari]
+            );
+
+            if (rows.length > 0) {
+                const pegawai = rows[0];
+                console.log(`✅ Akses Diterima: ${pegawai.name} (ID Pegawai: ${pegawai.emp_id})`);
                 
-                const sql = 'INSERT INTO staff_fing (niy, fitur) VALUES (?, ?)';
-                db.query(sql, [pendingNIY, template], (err) => {
-                    if (err) {
-                        console.error('❌ DATABASE ERROR: Gagal simpan fitur jari:', err.message);
-                    } else {
-                        console.log(`💾 SUKSES BESAR! Jari milik NIY ${pendingNIY} sudah masuk ke tabel staff_fing MySQL.`);
-                        pendingNIY = null; // Kosongin antrian buat orang berikutnya
-                    }
-                });
+                // CATATAN PENTING: Karena ERD Anda butuh session_id dan status_id, 
+                // untuk sementara kita isi NULL atau angka default (misal 1) jika diizinkan DB.
+                // Jika DB menolak NULL, pastikan Anda membuat 1 data dummy di tabel 'session' dan 'status'
+                try {
+                    await pool.query(
+                        `INSERT INTO absensi_history (employee_id, session_id, status_id, created_at) 
+                         VALUES (?, 1, 1, NOW())`,
+                        [pegawai.emp_id] 
+                    );
+                } catch (dbErr) {
+                    console.log("⚠️ Peringatan DB Absensi (Pastikan session_id/status_id valid):", dbErr.message);
+                }
+                
+                mqttClient.publish(topicBalasan, JSON.stringify({ status: "sukses", name: pegawai.name }));
             } else {
-                console.log('⚠️ DITOLAK: Jari masuk, tapi tidak ada NIY yang antri. Pastikan Anda klik tombol "Scan Jari" di Web terlebih dahulu, dan JANGAN me-restart Node.js saat alat sedang proses scan!');
+                console.log(`❌ Akses Ditolak: ID Jari ${idJari} tidak terdaftar di Database!`);
+                mqttClient.publish(topicBalasan, JSON.stringify({ status: "failed", name: "Tdk Dikenal" }));
             }
         }
         
-        else if (topic.includes('/login')) {
-            const finger_id = data.id;
+        // ---------------------------------------------------------
+        // 2. REGISTRASI -> Update Tabel fingerprint
+        // ---------------------------------------------------------
+        else if (action === 'register') {
+            const idJariDariESP = data.template_id; // Ini jadi server_id
+            const templateHex = data.template;
 
-            const sqlCariOrang = 'SELECT niy FROM staff_fing_distribution WHERE sensor_id = ? AND fing_id = ?';
-            db.query(sqlCariOrang, [sensor_id, finger_id], (err, results) => {
-                if (err) return console.error(err);
+            if (sesiRegistrasiAktif_EmpId) {
+                console.log(`\n💾 Disimpan di Server ID: ${idJariDariESP} untuk Employee ID: ${sesiRegistrasiAktif_EmpId}`);
                 
-                if (results.length === 0) {
-                    console.log(`❌ Ditolak: Finger ID ${finger_id} tidak terdaftar di alat ini!`);
-                    mqttClient.publish(`fingerprint/${sensor_id}/status`, '❌ Ditolak: Akses Tidak Ada');
-                    return;
+                // Cek apakah pegawai ini sudah punya data sidik jari
+                const [existing] = await pool.query(`SELECT * FROM fingerprint WHERE employee_id = ?`, [sesiRegistrasiAktif_EmpId]);
+                
+                if (existing.length > 0) {
+                    // Update
+                    await pool.query(
+                        `UPDATE fingerprint SET template = ?, server_id = ? WHERE employee_id = ?`,
+                        [templateHex, idJariDariESP, sesiRegistrasiAktif_EmpId]
+                    );
+                } else {
+                    // Insert Baru
+                    await pool.query(
+                        `INSERT INTO fingerprint (employee_id, server_id, template) VALUES (?, ?, ?)`,
+                        [sesiRegistrasiAktif_EmpId, idJariDariESP, templateHex]
+                    );
                 }
 
-                const niy = results[0].niy;
-                const jamSekarang = new Date().getHours();
-                let jenisAbsen = '';
-
-                // Logika Jam (6-9, 9-15, 15-21)
-                if (jamSekarang >= 6 && jamSekarang < 9) jenisAbsen = 'Login';
-                else if (jamSekarang >= 9 && jamSekarang < 15) jenisAbsen = 'Login Late';
-                else if (jamSekarang >= 15 && jamSekarang < 22) jenisAbsen = 'Logout';
-                else {
-                    mqttClient.publish(`fingerprint/${sensor_id}/status`, '⚠️ Luar Jam Absen');
-                    return;
-                }
-
-                const sqlAbsen = 'INSERT INTO absensi (niy, jenis, sensor_id) VALUES (?, ?, ?)';
-                db.query(sqlAbsen, [niy, jenisAbsen, sensor_id], (err2) => {
-                    if (err2) return console.error(err2);
-                    
-                    db.query('SELECT nama FROM staff WHERE niy = ?', [niy], (err3, staffRes) => {
-                        const nama = staffRes[0].nama;
-                        const pesanNotif = `✅ ${nama} - ${jenisAbsen} Berhasil!`;
-                        console.log(`⏱️ ${pesanNotif}`);
-                        mqttClient.publish(`fingerprint/${sensor_id}/status`, pesanNotif);
-                    });
-                });
-            });
+                console.log(`✅ Sukses! Data diamankan di database MySQL.`);
+                sesiRegistrasiAktif_EmpId = null; // Reset
+            }
         }
-    } catch (error) {
-        console.error('❌ Error processing data:', error.message);
-    }
-});
-
-// ==========================================
-// 5. API UNTUK WEB DASHBOARD (MASTER DATA)
-// ==========================================
-
-app.get('/api/staff', (req, res) => {
-    const sql = `
-        SELECT s.niy, s.nama, s.biro, 
-        CASE WHEN sf.fitur IS NOT NULL THEN 'Sudah' ELSE 'Belum' END as status_jari
-        FROM staff s
-        LEFT JOIN staff_fing sf ON s.niy = sf.niy
-    `;
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
-});
-
-app.post('/api/staff', (req, res) => {
-    const { niy, nama, biro } = req.body;
-    const sql = 'INSERT INTO staff (niy, nama, biro) VALUES (?, ?, ?)';
-    db.query(sql, [niy, nama, biro], (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ message: 'Data Pegawai Berhasil Ditambahkan!' });
-    });
-});
-
-app.post('/api/trigger-register', (req, res) => {
-    const { niy, sensor_admin } = req.body; 
-    pendingNIY = niy; 
-    
-    // Pakai ID 127 sebagai buffer/tong sampah sementara di alat
-    const commandTopic = `fingerprint/${sensor_admin}/command`;
-    mqttClient.publish(commandTopic, 'register 127', () => {
-        res.json({ message: 'Mode scan aktif! Silakan tempel jari ke sensor.' });
-    });
-});
-
-// ==========================================
-// 6. API BARU: DISTRIBUSI (ACCESS CONTROL)
-// ==========================================
-
-// Endpoint: Tarik daftar pegawai yang UDAH PUNYA sidik jari untuk didistribusikan
-app.get('/api/staff-ready', (req, res) => {
-    const sql = `
-        SELECT s.niy, s.nama, s.biro 
-        FROM staff s
-        JOIN staff_fing sf ON s.niy = sf.niy
-    `;
-    db.query(sql, (err, results) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(results);
-    });
-});
-
-// ==========================================
-// 7. API BARU: LOG ABSENSI
-// ==========================================
-app.get('/api/absensi', (req, res) => {
-    // Kita tarik data absen dan gabungin sama nama/biro pegawai
-    const sql = `
-        SELECT a.id, a.waktu, a.niy, s.nama, s.biro, a.jenis, a.sensor_id 
-        FROM absensi a
-        JOIN staff s ON a.niy = s.niy
-        ORDER BY a.waktu DESC
-    `;
-    db.query(sql, (err, results) => {
-        if (err) {
-            console.error('❌ Error pas narik data absensi:', err.message);
-            return res.status(500).json({ error: err.message });
-        }
-        res.json(results);
-    });
-});
-
-// ==========================================
-// 8. API BARU: AUTENTIKASI LOGIN WEB
-// ==========================================
-app.post('/api/login', (req, res) => {
-    const { niy } = req.body;
-
-    if (!niy) {
-        return res.status(400).json({ error: "NIY tidak boleh kosong!" });
-    }
-
-    // Cari NIY ini di database dan cek rolenya
-    const sql = 'SELECT niy, nama, role FROM staff WHERE niy = ?';
-    db.query(sql, [niy], (err, results) => {
-        if (err) return res.status(500).json({ error: "Terjadi kesalahan database" });
-
-        if (results.length === 0) {
-            return res.status(401).json({ error: "Login Gagal: NIY tidak ditemukan!" });
-        }
-
-        const user = results[0];
         
-        // Simulasikan pembuatan "Sesi/Token" dengan ngirim balik data user
-        res.json({
-            message: "Login Berhasil",
-            user: {
-                niy: user.niy,
-                nama: user.nama,
-                role: user.role
+        // ---------------------------------------------------------
+        // 3. STATUS RESTORE
+        // ---------------------------------------------------------
+        else if (action === 'status') {
+            if (data.status === "sukses" && data.message === "all data restored") {
+                console.log(`\n🎉 LAPORAN ESP32: Sukses, All Data Restored!`);
             }
-        });
-    });
-});
-
-// ==========================================
-// 9. API BARU: LAPORAN ABSENSI (DENGAN FILTER)
-// ==========================================
-app.get('/api/laporan', (req, res) => {
-    const { tgl_mulai, tgl_akhir, biro } = req.query;
-
-    // Filter wajib: Rentang Tanggal
-    if (!tgl_mulai || !tgl_akhir) {
-        return res.status(400).json({ error: "Tanggal mulai dan akhir harus diisi!" });
-    }
-
-    let sql = `
-        SELECT DATE(a.waktu) as tanggal, TIME(a.waktu) as jam, a.niy, s.nama, s.biro, a.jenis, a.sensor_id 
-        FROM absensi a
-        JOIN staff s ON a.niy = s.niy
-        WHERE DATE(a.waktu) BETWEEN ? AND ?
-    `;
-    let params = [tgl_mulai, tgl_akhir];
-
-    // Filter opsional: Biro (Kalau admin mau narik data per unit aja)
-    if (biro && biro.trim() !== '') {
-        sql += ` AND s.biro LIKE ?`;
-        params.push(`%${biro}%`);
-    }
-
-    // Urutkan dari tanggal terlama ke terbaru, lalu berdasarkan nama
-    sql += ` ORDER BY DATE(a.waktu) ASC, s.nama ASC, TIME(a.waktu) ASC`;
-
-    db.query(sql, params, (err, results) => {
-        if (err) {
-            console.error('❌ Error API Laporan:', err.message);
-            return res.status(500).json({ error: err.message });
         }
-        res.json(results);
-    });
+    } catch (e) {
+        console.log("Error:", e.message);
+    }
 });
 
-// Endpoint: Eksekusi Distribusi (Bisa massal/bulk)
-app.post('/api/distribusi', async (req, res) => {
-    const { sensor_id, niy_list } = req.body; // niy_list bentuknya array: ["123", "456"]
+// ====================== API PANEL ADMIN ======================
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
-    if (!sensor_id || !niy_list || niy_list.length === 0) {
-        return res.status(400).json({ error: "Sensor ID dan Data Pegawai harus diisi!" });
-    }
-
+// API: Ambil Data untuk Tabel Web
+app.get('/api/users', async (req, res) => {
     try {
-        const dbPromise = db.promise(); // Pakai mode Async biar aman pas ngelooping database
-        let successCount = 0;
-
-        // Kita looping setiap NIY yang mau dikasih akses
-        for (let niy of niy_list) {
-            
-            // 1. Cek: Apakah orang ini udah punya akses di pintu ini?
-            const [cekAkses] = await dbPromise.query('SELECT id FROM staff_fing_distribution WHERE niy = ? AND sensor_id = ?', [niy, sensor_id]);
-            if (cekAkses.length > 0) continue; // Udah punya, skip ke orang berikutnya!
-
-            // 2. Tarik template hex-nya dari Bank Data
-            const [cekJari] = await dbPromise.query('SELECT fitur FROM staff_fing WHERE niy = ?', [niy]);
-            if (cekJari.length === 0) continue; // Mustahil terjadi sih, tapi jaga-jaga
-            const template_hex = cekJari[0].fitur;
-
-            // 3. CARI ID KOSONG DI SENSOR INI (Maksimal 126)
-            const [usedIdsRaw] = await dbPromise.query('SELECT fing_id FROM staff_fing_distribution WHERE sensor_id = ?', [sensor_id]);
-            const usedIds = usedIdsRaw.map(row => row.fing_id);
-            
-            let new_fing_id = 1; // Mulai nyari dari angka 1
-            while (usedIds.includes(new_fing_id) && new_fing_id < 127) {
-                new_fing_id++; // Kalau angka dipake, naik ke angka berikutnya
-            }
-
-            if (new_fing_id >= 127) {
-                console.log(`⚠️ Peringatan: Sensor ${sensor_id} penuh kapasitasnya!`);
-                break; // Berhenti ngelooping kalau alatnya udah full
-            }
-
-            // 4. Catat di database distribusi kalau dia dikasih akses di alat ini
-            await dbPromise.query('INSERT INTO staff_fing_distribution (niy, sensor_id, fing_id) VALUES (?, ?, ?)', [niy, sensor_id, new_fing_id]);
-
-            // 5. Tembak payload ke MQTT buat nyuntik/upload ke ESP32 secara remote
-            const payloadMQTT = { id: new_fing_id, template: template_hex };
-            mqttClient.publish(`fingerprint/${sensor_id}/upload`, JSON.stringify(payloadMQTT));
-            
-            successCount++;
-        }
-
-        res.json({ message: `Berhasil mendistribusikan ${successCount} sidik jari ke Sensor ${sensor_id}!` });
-
-    } catch (error) {
-        console.error('❌ Error Distribusi:', error);
-        res.status(500).json({ error: "Terjadi kesalahan sistem saat distribusi." });
+        const [rows] = await pool.query(
+            `SELECT e.uuid as niy, e.name as nama, f.server_id as id, f.template 
+             FROM employee e 
+             LEFT JOIN fingerprint f ON e.id = f.employee_id`
+        );
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
     }
 });
 
-// Jalankan Server API
-app.listen(PORT, () => {
-    console.log(`🚀 API Server (V3 - Final) berjalan di http://localhost:${PORT}`);
+// API: Terima Perintah dari Web
+app.post('/api/command', async (req, res) => {
+    const { sensorId, action, niy } = req.body; // 'niy' di input web sekarang mencari kolom 'uuid'
+    const topicCommand = `absensi/${sensorId}/command`;
+
+    // A. REGISTER
+    if (action === 'enroll') {
+        // Cari id (Primary Key) pegawai berdasarkan UUID yang diketik Admin
+        const [cekPegawai] = await pool.query(`SELECT id, name FROM employee WHERE uuid = ?`, [niy]);
+        
+        if (cekPegawai.length === 0) {
+            return res.status(400).json({ status: "error", message: `Gagal! UUID ${niy} tidak ada di tabel employee.` });
+        }
+
+        sesiRegistrasiAktif_EmpId = cekPegawai[0].id; // Kita simpan PK-nya, bukan UUID-nya
+        console.log(`⚙️ Admin trigger Registrasi untuk ${cekPegawai[0].name}`);
+        mqttClient.publish(topicCommand, "register"); 
+        res.json({ status: "success", message: `Perintah dikirim! Silakan tap jari ${cekPegawai[0].name} di alat.` });
+    }
+    
+    // B. RESTORE ALL
+    else if (action === 'restore_all') {
+        console.log(`⚙️ Memulai proses Restore...`);
+        res.json({ status: "success", message: `Memulai Restore, silakan cek layar ESP32!` });
+        
+        try {
+            // Ambil semua data fingerprint yang valid
+            const [rows] = await pool.query(`SELECT server_id, template FROM fingerprint WHERE template IS NOT NULL AND template != ''`);
+            
+            for (const row of rows) {
+                const payloadRestore = JSON.stringify({
+                    template_id: parseInt(row.server_id),
+                    template: row.template
+                });
+                mqttClient.publish(`absensi/${sensorId}/upload`, payloadRestore);
+                await sleep(1500); 
+            }
+            mqttClient.publish(topicCommand, "restore_done");
+        } catch (err) {
+            console.error("Gagal Restore:", err);
+        }
+    }
+    
+    // C. DELETE ALL
+    else if (action === 'delete_all') {
+        mqttClient.publish(topicCommand, "delete_all");
+        res.json({ status: "success", message: "Perintah Format Semua dikirim!" });
+    }
+    else {
+        res.status(400).json({ status: "error", message: "Perintah tidak dikenali!" });
+    }
+});
+
+app.listen(port, () => {
+    console.log(`🚀 Server Backend Node.js (MySQL Baru Connected) berjalan di http://localhost:${port}`);
 });
