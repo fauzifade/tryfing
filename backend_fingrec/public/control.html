@@ -37,6 +37,7 @@
                 <label>Aksi</label>
                 <select id="actionSelect" onchange="toggleInputs()">
                     <option value="enroll">Daftarkan Jari Baru (Register)</option>
+                    <option value="get_slots">Cek Memori Mesin (Get Slots)</option>
                     <option value="restore_all">Suntik Data Server ke Alat (Restore)</option>
                     <option value="delete_all">Format Bersih Memori Alat (Delete All)</option>
                 </select>
@@ -49,8 +50,8 @@
                 <input type="text" id="niyInput" placeholder="Misal: 2026001">
             </div>
         </div>
-
-        <button id="btnSubmit" class="btn-primary" onclick="kirimPerintah()">Mulai Scan Jari</button>
+        
+        <button id="btnSubmit" class="btn-primary" onclick="kirimPerintah()">Mulai Scan Jari (Register)</button>
         <div id="notif" class="notif"></div>
     </div>
 
@@ -63,7 +64,11 @@
             <tbody>
                 <tr>
                     <td><span class="badge info">Register</span></td>
-                    <td>Mendaftarkan sidik jari baru untuk karyawan berdasarkan UUID. Pastikan karyawan sudah ada di database.</td>
+                    <td>Mendaftarkan sidik jari baru untuk karyawan. Pastikan karyawan sudah ada di database.</td>
+                </tr>
+                <tr>
+                    <td><span class="badge info">Get Slots</span></td>
+                    <td>Meminta ESP32 mengirimkan daftar ID sidik jari yang saat ini terisi di dalam mesinnya.</td>
                 </tr>
                 <tr>
                     <td><span class="badge info">Restore</span></td>
@@ -80,6 +85,7 @@
 
 <script src="api.js"></script>
 <script>
+// Fungsi untuk mengubah tampilan form berdasarkan Aksi yang dipilih
 function toggleInputs() {
     const action = document.getElementById('actionSelect').value;
     const niyGroup = document.getElementById('niyGroup');
@@ -89,6 +95,10 @@ function toggleInputs() {
         niyGroup.style.display = 'flex';
         btn.className = 'btn-primary';
         btn.textContent = 'Mulai Scan Jari (Register)';
+    } else if (action === 'get_slots') {
+        niyGroup.style.display = 'none';
+        btn.className = 'btn-primary';
+        btn.textContent = 'Minta Data Memori';
     } else if (action === 'restore_all') {
         niyGroup.style.display = 'none';
         btn.className = 'btn-primary';
@@ -100,29 +110,50 @@ function toggleInputs() {
     }
 }
 
+// Fungsi untuk menembak API Backend
 async function kirimPerintah() {
     const sensorId = document.getElementById('sensorId').value.trim();
     const action = document.getElementById('actionSelect').value;
     const niy = document.getElementById('niyInput').value.trim();
 
+    // Validasi form registrasi
     if (action === 'enroll' && !niy) {
         showNotif('notif', 'UUID / NIY tidak boleh kosong untuk registrasi!', true);
         return;
     }
 
+    // Validasi keamanan format memori
     if (action === 'delete_all' && !confirm('YAKIN ingin menghapus SEMUA data sidik jari di alat?')) {
         return;
     }
 
+    // Ubah teks tombol jadi loading sementara
+    const btn = document.getElementById('btnSubmit');
+    const originalText = btn.textContent;
+    btn.textContent = 'Mengirim...';
+    btn.disabled = true;
+
     try {
+        // Karena api.js lu udah nanganin fetch, kita tinggal panggil apiPost
         const result = await apiPost('/api/command', { sensorId, action, niy });
+        
+        // Tampilkan notifikasi (hijau kalau sukses, merah kalau gagal)
         showNotif('notif', result.message, result.status !== 'success');
+        
+        if (action === 'get_slots' && result.status === 'success') {
+            // Opsional: Kasih alert tambahan biar admin tau ngeceknya dimana
+            setTimeout(() => {
+                alert("Perintah terkirim! Silakan cek terminal/log backend Node.js Anda untuk melihat daftar ID yang terisi.");
+            }, 500);
+        }
     } catch (e) {
         showNotif('notif', 'Gagal menghubungi server!', true);
+    } finally {
+        // Balikin tombol seperti semula
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }
-
-toggleInputs();
 </script>
 
 </body>
