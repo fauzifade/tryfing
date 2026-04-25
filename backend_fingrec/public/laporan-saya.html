@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kehadiran Saya — AbsensiIoT</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="api.js"></script>
+<script>requireAuth(); renderNav('nav-laporan-saya')</script>
+
+<div class="main">
+    <div class="page-title">Rekap Kehadiran Saya</div>
+
+    <div class="card">
+        <div class="card-title">Pilih Bulan</div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Bulan</label>
+                <input type="month" id="bulanInput">
+            </div>
+            <div class="form-group" style="flex:0.4;align-self:flex-end">
+                <button class="btn-primary" style="margin-top:0" onclick="muat()">Tampilkan</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="statGrid" class="stat-grid" style="display:none">
+        <div class="stat-card"><div class="label">Hadir</div><div class="value green" id="stHadir">0</div></div>
+        <div class="stat-card"><div class="label">Terlambat</div><div class="value amber" id="stTerlambat">0</div></div>
+        <div class="stat-card"><div class="label">Total Menit Telat</div><div class="value amber" id="stMenit">0</div></div>
+        <div class="stat-card"><div class="label">Izin Disetujui</div><div class="value purple" id="stIzin">0</div></div>
+        <div class="stat-card"><div class="label">Alpha</div><div class="value red" id="stAlpha">0</div></div>
+        <div class="stat-card"><div class="label">% Kehadiran</div><div class="value blue" id="stPct">0%</div></div>
+    </div>
+
+    <div class="card" id="cardDetail" style="display:none">
+        <div class="card-title">Rincian Harian</div>
+        <table>
+            <thead>
+                <tr><th>Tanggal</th><th>Hari</th><th>Waktu Tap</th><th>Status</th></tr>
+            </thead>
+            <tbody id="detailBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const now = new Date();
+document.getElementById('bulanInput').value =
+    `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+async function muat() {
+    const bulan = document.getElementById('bulanInput').value;
+    if (!bulan) return;
+
+    const [data, riwayat] = await Promise.all([
+        apiGet(`/api/laporan?bulan=${bulan}`),
+        apiGet('/api/users/history')
+    ]);
+    if (!data || !data.length) return;
+    const d = data[0];
+
+    document.getElementById('stHadir').textContent     = d.hadir || 0;
+    document.getElementById('stTerlambat').textContent = d.terlambat || 0;
+    document.getElementById('stMenit').textContent     = (d.total_menit_telat || 0) + ' mnt';
+    document.getElementById('stIzin').textContent      = d.izin || 0;
+    document.getElementById('stAlpha').textContent     = d.alpha || 0;
+    const total = (d.hadir||0) + (d.terlambat||0) + (d.izin||0) + (d.alpha||0);
+    const pct = total > 0 ? Math.round(((d.hadir||0)+(d.terlambat||0)) / total * 100) : 0;
+    document.getElementById('stPct').textContent = pct + '%';
+    document.getElementById('statGrid').style.display = 'grid';
+
+    // Rincian harian
+    if (riwayat) {
+        const [y, m] = bulan.split('-');
+        const filtered = riwayat.filter(r => {
+            const rd = new Date(r.created_at);
+            return rd.getFullYear() == y && (rd.getMonth()+1) == m;
+        });
+        const tbody = document.getElementById('detailBody');
+        tbody.innerHTML = filtered.length ? filtered.map(r => {
+            const d = new Date(r.created_at);
+            return `<tr>
+                <td style="font-size:12px">${d.toLocaleDateString('id-ID')}</td>
+                <td style="font-size:12px">${HARI[d.getDay()]}</td>
+                <td style="font-size:12px">${d.toLocaleTimeString('id-ID')}</td>
+                <td>${r.status_nama ? `<span class="badge info">${r.status_nama}</span>` : '—'}</td>
+            </tr>`;
+        }).join('')
+        : '<tr class="loading-row"><td colspan="4">Tidak ada data tap bulan ini.</td></tr>';
+        document.getElementById('cardDetail').style.display = 'block';
+    }
+}
+
+muat();
+</script>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard — Absensi IoT</title>
+    <!-- <link rel="preconnect" href="https://fonts.googleapis.com"> -->
+    <!-- <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet"> -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <a class="logo" href="dashboard.html">⬡ TryFing</a>
+    <nav>
+        <a href="dashboard.html" class="active" >Dashboard</a>
+        <!-- <a href="control.html">Kontrol ESP32</a> -->
+        <a href="register.html">Register Jari</a>
+        <a href="restore.html">Restore Data</a>
+        <a href="format.html">Format Alat</a>
+        <a href="history.html">Riwayat Absensi</a>
+    </nav>
+</div>
+
+<div class="main">
+    <div class="page-title">Database Karyawan</div>
+
+    <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Semua Karyawan</span>
+            <span id="counter" style="font-size:11px;color:var(--text-muted)">— karyawan</span>
+        </div>
+        <table id="tabel">
+            <thead>
+                <tr>
+                    <th>ID Jari</th>
+                    <th>Nama</th>
+                    <th>NIY / UUID</th>
+                    <th>Unit</th>
+                    <th>Role</th>
+                    <th>Sidik Jari</th>
+                </tr>
+            </thead>
+            <tbody id="tbody">
+                <tr class="loading-row"><td colspan="6">Memuat data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+async function muatData() {
+    try {
+        const users = await apiGet('/api/users');
+        const tbody = document.getElementById('tbody');
+        const counter = document.getElementById('counter');
+
+        counter.textContent = `${users.length} karyawan`;
+
+        if (users.length === 0) {
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="6">Tidak ada data.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(u => {
+            const isReady = u.template && u.template.length > 50;
+            const badge = isReady
+                ? '<span class="badge ready">Terekam</span>'
+                : '<span class="badge empty">Kosong</span>';
+            const idJari = u.id || '<span style="color:var(--text-muted)">—</span>';
+            return `<tr>
+                <td>${idJari}</td>
+                <td>${u.nama}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${u.niy || '—'}</td>
+                <td style="font-size:12px">${u.unit || '—'}</td>
+                <td style="font-size:12px">${u.role || '—'}</td>
+                <td>${badge}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error('Gagal memuat data:', e);
+    }
+}
+
+muatData();
+setInterval(muatData, 5000);
+</script>
+
+</body>
+</html>

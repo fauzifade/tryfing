@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Restore Data — Absensi IoT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <a class="logo" href="dashboard.html">⬡ TryFing</a>
+    <nav>
+         <a href="dashboard.html">Dashboard</a>
+        <!-- <a href="control.html">Kontrol ESP32</a> -->
+        <a href="register.html">Register Jari</a>
+        <a href="restore.html" class="active">Restore Data</a>
+        <a href="format.html">Format Alat</a>
+        <a href="history.html">Riwayat Absensi</a>
+    </nav>
+</div>
+
+<div class="main">
+    <div class="page-title">Sinkronisasi Data ke Alat</div>
+
+    <div class="card">
+        <div class="card-title">Konfigurasi</div>
+        <div class="form-group">
+            <label>Sensor ID</label>
+            <input type="text" id="sensorId" value="01">
+        </div>
+        <br>
+        <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+            Aksi ini akan mengirimkan semua template sidik jari yang tersimpan di server ke alat ESP32.
+        </p>
+        <button class="btn-primary" onclick="kirimRestore()">Suntik Data ke ESP32</button>
+        <div id="notif" class="notif"></div>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+async function kirimRestore() {
+    const sensorId = document.getElementById('sensorId').value.trim();
+    try {
+        const result = await apiPost('/api/command', { sensorId, action: 'restore_all' });
+        showNotif('notif', result.message, result.status !== 'success');
+    } catch (e) {
+        showNotif('notif', 'Gagal menghubungi server!', true);
+    }
+}
+</script>
+</body>
+</html>

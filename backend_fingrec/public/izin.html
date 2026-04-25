@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perizinan — AbsensiIoT</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="api.js"></script>
+<script>requireAuth(); renderNav('nav-izin')</script>
+<div class="main">
+    <div class="page-title">Perizinan</div>
+
+    <div class="card" id="formCard">
+        <div class="card-title">Ajukan Izin</div>
+        <div class="form-row" id="empRow" style="display:none">
+            <div class="form-group">
+                <label>Karyawan (Admin: pilih siapa saja)</label>
+                <select id="empSelect"><option value="">-- Pilih Karyawan --</option></select>
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Jenis Izin</label>
+                <select id="jenisIzin">
+                    <option value="izin">Izin</option>
+                    <option value="sakit">Sakit</option>
+                    <option value="cuti">Cuti</option>
+                    <option value="dinas">Dinas Luar</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Dari Tanggal</label>
+                <input type="date" id="izinDari">
+            </div>
+            <div class="form-group">
+                <label>Sampai Tanggal</label>
+                <input type="date" id="izinSampai">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Keterangan</label>
+                <textarea id="keterangan" placeholder="Alasan izin..."></textarea>
+            </div>
+        </div>
+        <button class="btn-primary" onclick="ajukanIzin()">Simpan Izin</button>
+        <div id="notifIzin" class="notif"></div>
+    </div>
+
+    <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center">
+            <span id="tabelJudul">Daftar Izin</span>
+            <select id="filterStatus" onchange="muatIzin()" style="width:auto;padding:4px 8px;font-size:11px">
+                <option value="">Semua status</option>
+                <option value="pending">Pending</option>
+                <option value="disetujui">Disetujui</option>
+                <option value="ditolak">Ditolak</option>
+            </select>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th id="thNama">Nama</th><th>Jenis</th>
+                    <th>Dari</th><th>Sampai</th>
+                    <th>Keterangan</th><th>Status</th>
+                    <th id="thAksi">Aksi</th>
+                </tr>
+            </thead>
+            <tbody id="izinBody"><tr class="loading-row"><td colspan="7">Memuat...</td></tr></tbody>
+        </table>
+    </div>
+</div>
+<script>
+const user = getUser();
+const admin = isAdmin();
+
+// Setup tampilan berdasarkan role
+if (admin) {
+    document.getElementById('empRow').style.display = 'flex';
+    document.getElementById('tabelJudul').textContent = 'Semua Pengajuan Izin';
+} else {
+    document.getElementById('thNama').style.display = 'none';
+    document.getElementById('thAksi').textContent = '';
+}
+
+async function muatKaryawan() {
+    if (!admin) return;
+    const users = await apiGet('/api/users');
+    if (!users) return;
+    const sel = document.getElementById('empSelect');
+    users.forEach(u => {
+        const o = document.createElement('option');
+        o.value = u.emp_id; o.textContent = `${u.nama} — ${u.unit||u.role||''}`;
+        sel.appendChild(o);
+    });
+}
+
+async function ajukanIzin() {
+    const emp_id     = admin ? document.getElementById('empSelect').value : null;
+    const jenis      = document.getElementById('jenisIzin').value;
+    const dari       = document.getElementById('izinDari').value;
+    const sampai     = document.getElementById('izinSampai').value;
+    const keterangan = document.getElementById('keterangan').value.trim();
+    if (admin && !emp_id) { showNotif('notifIzin','Pilih karyawan terlebih dahulu!',true); return; }
+    if (!dari||!sampai)   { showNotif('notifIzin','Tanggal wajib diisi!',true); return; }
+    if (dari>sampai)      { showNotif('notifIzin','Tanggal mulai tidak boleh lebih besar!',true); return; }
+    const res = await apiPost('/api/izin', { emp_id, jenis, dari, sampai, keterangan });
+    if (!res) return;
+    showNotif('notifIzin', res.message, res.status !== 'success');
+    if (res.status === 'success') {
+        ['empSelect','izinDari','izinSampai','keterangan'].forEach(id => {
+            const el=document.getElementById(id); if(el) el.value='';
+        });
+        muatIzin();
+    }
+}
+
+async function updateStatus(id, status) {
+    const res = await apiPatch(`/api/izin/${id}`, { status });
+    if (res) { showToast(res.message, res.status!=='success'); muatIzin(); }
+}
+
+async function muatIzin() {
+    const fs = document.getElementById('filterStatus').value;
+    const rows = await apiGet(`/api/izin${fs?'?status='+fs:''}`);
+    if (!rows) return;
+    const tbody = document.getElementById('izinBody');
+    if (!rows.length) { tbody.innerHTML='<tr class="loading-row"><td colspan="7">Tidak ada data izin.</td></tr>'; return; }
+    tbody.innerHTML = rows.map(r => {
+        const bc = r.status==='disetujui'?'ready':r.status==='ditolak'?'empty':'amber';
+        const aksi = admin && r.status==='pending'
+            ? `<button onclick="updateStatus(${r.id},'disetujui')" style="font-size:10px;padding:3px 8px;background:rgba(46,204,113,0.15);color:var(--green);border:1px solid rgba(46,204,113,0.3);border-radius:3px;cursor:pointer;margin-right:4px">Setujui</button>
+               <button onclick="updateStatus(${r.id},'ditolak')" style="font-size:10px;padding:3px 8px;background:rgba(231,76,60,0.15);color:var(--red);border:1px solid rgba(231,76,60,0.3);border-radius:3px;cursor:pointer">Tolak</button>`
+            : `<span style="font-size:11px;color:var(--text-muted)">—</span>`;
+        return `<tr>
+            <td ${!admin?'style="display:none"':''}>${r.nama}</td>
+            <td><span class="badge info">${r.jenis}</span></td>
+            <td style="font-size:12px">${formatDateOnly(r.dari)}</td>
+            <td style="font-size:12px">${formatDateOnly(r.sampai)}</td>
+            <td style="font-size:12px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.keterangan||'—'}</td>
+            <td><span class="badge ${bc}">${r.status}</span></td>
+            <td>${aksi}</td>
+        </tr>`;
+    }).join('');
+}
+
+muatKaryawan();
+muatIzin();
+</script>
+</body></html>

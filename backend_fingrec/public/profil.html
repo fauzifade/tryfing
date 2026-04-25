@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Profil — AbsensiIoT</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="api.js"></script>
+<script>requireAuth(); renderNav('nav-profil')</script>
+
+<div class="main">
+    <div class="page-title">Profil Saya</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+        <div class="card">
+            <div class="card-title">Informasi Akun</div>
+            <table>
+                <tbody id="infoAkun">
+                    <tr class="loading-row"><td colspan="2">Memuat...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="card">
+            <div class="card-title">Ganti Password</div>
+            <div class="form-group" style="margin-bottom:10px">
+                <label>Password Lama</label>
+                <input type="password" id="oldPass" placeholder="Password saat ini">
+            </div>
+            <div class="form-group" style="margin-bottom:10px">
+                <label>Password Baru</label>
+                <input type="password" id="newPass" placeholder="Minimal 6 karakter">
+            </div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label>Konfirmasi Password Baru</label>
+                <input type="password" id="confirmPass" placeholder="Ulangi password baru">
+            </div>
+            <button class="btn-primary" onclick="gantiPassword()">Simpan Password</button>
+            <div id="notifPass" class="notif"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Status Sidik Jari</div>
+        <div id="statusJari" style="font-size:13px;color:var(--text-muted);padding:8px 0">Memuat...</div>
+    </div>
+
+    <div class="card">
+        <div class="card-title">Riwayat Absensi Terbaru</div>
+        <table>
+            <thead>
+                <tr><th>Tanggal</th><th>Waktu</th><th>Status</th></tr>
+            </thead>
+            <tbody id="riwayatBody">
+                <tr class="loading-row"><td colspan="3">Memuat...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+function renderInfo() {
+    const u = getUser();
+    if (!u) return;
+    document.getElementById('infoAkun').innerHTML = `
+        <tr><td style="color:var(--text-muted);font-size:12px">Nama Akun</td><td>${u.name}</td></tr>
+        <tr><td style="color:var(--text-muted);font-size:12px">Role</td><td>${u.role_id === 1 ? '<span class="badge info">Admin</span>' : '<span class="badge ready">Staff</span>'}</td></tr>
+        <tr><td style="color:var(--text-muted);font-size:12px">Nama Lengkap</td><td>${u.emp_name || '—'}</td></tr>
+        <tr><td style="color:var(--text-muted);font-size:12px">UUID</td><td style="font-size:12px;color:var(--text-muted)">${u.uuid || '—'}</td></tr>
+        <tr><td style="color:var(--text-muted);font-size:12px">Unit</td><td>${u.unit || '—'}</td></tr>
+        <tr><td style="color:var(--text-muted);font-size:12px">Jabatan</td><td>${u.emp_role || '—'}</td></tr>
+    `;
+}
+
+async function gantiPassword() {
+    const oldPass = document.getElementById('oldPass').value;
+    const newPass = document.getElementById('newPass').value;
+    const confirmPass = document.getElementById('confirmPass').value;
+    if (!oldPass || !newPass) { showNotif('notifPass', 'Semua field wajib diisi!', true); return; }
+    if (newPass !== confirmPass) { showNotif('notifPass', 'Konfirmasi password tidak cocok!', true); return; }
+    if (newPass.length < 6) { showNotif('notifPass', 'Password baru minimal 6 karakter!', true); return; }
+    const res = await apiPost('/api/auth/change-password', { old_password: oldPass, new_password: newPass });
+    if (res) {
+        showNotif('notifPass', res.message, res.status !== 'success');
+        if (res.status === 'success') {
+            document.getElementById('oldPass').value = '';
+            document.getElementById('newPass').value = '';
+            document.getElementById('confirmPass').value = '';
+        }
+    }
+}
+
+async function muatRiwayat() {
+    const rows = await apiGet('/api/users/history');
+    if (!rows) return;
+    const tbody = document.getElementById('riwayatBody');
+    if (!rows.length) {
+        tbody.innerHTML = '<tr class="loading-row"><td colspan="3">Belum ada riwayat absensi.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.slice(0,10).map(r => `<tr>
+        <td style="font-size:12px">${formatDateOnly(r.created_at)}</td>
+        <td style="font-size:12px">${new Date(r.created_at).toLocaleTimeString('id-ID')}</td>
+        <td>${r.status_nama ? `<span class="badge info">${r.status_nama}</span>` : '—'}</td>
+    </tr>`).join('');
+}
+
+async function muatStatusJari() {
+    const users = await apiGet('/api/users');
+    if (!users || !users.length) return;
+    const u = users[0];
+    const isReady = u.template && u.template.length > 50;
+    document.getElementById('statusJari').innerHTML = isReady
+        ? `<span class="badge ready">Terekam</span> &nbsp; ID Jari: <strong>${u.id || '—'}</strong>`
+        : `<span class="badge empty">Belum Terekam</span> &nbsp; Hubungi Admin untuk mendaftarkan sidik jari.`;
+}
+
+renderInfo();
+muatRiwayat();
+muatStatusJari();
+</script>
+</body>
+</html>

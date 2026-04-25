@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registrasi Jari — Absensi IoT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <a class="logo" href="dashboard.html">⬡ AbsensiIoT</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <!-- <a href="control.html">Kontrol ESP32</a> -->
+        <a href="register.html" class="active">Register Jari</a>
+        <a href="restore.html">Restore Data</a>
+        <a href="format.html">Format Alat</a>
+        <a href="history.html">Riwayat Absensi</a>
+    </nav>
+</div>
+
+<div class="main">
+    <div class="page-title">Pendaftaran Sidik Jari Baru</div>
+
+    <div class="card">
+        <div class="card-title">Data Karyawan</div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Sensor ID</label>
+                <input type="text" id="sensorId" value="01">
+            </div>
+            <div class="form-group">
+                <label>UUID / NIY Karyawan</label>
+                <input type="text" id="niyInput" placeholder="Contoh: 2026001">
+            </div>
+        </div>
+        <button id="btnSubmit" class="btn-primary" onclick="kirimRegister()">Mulai Scan Jari</button>
+        <div id="notif" class="notif"></div>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+async function kirimRegister() {
+    const sensorId = document.getElementById('sensorId').value.trim();
+    const niy = document.getElementById('niyInput').value.trim();
+
+    if (!niy) {
+        showNotif('notif', 'UUID / NIY tidak boleh kosong!', true);
+        return;
+    }
+
+    try {
+        const result = await apiPost('/api/command', { sensorId, action: 'enroll', niy });
+        showNotif('notif', result.message, result.status !== 'success');
+    } catch (e) {
+        showNotif('notif', 'Gagal menghubungi server!', true);
+    }
+}
+</script>
+</body>
+</html>

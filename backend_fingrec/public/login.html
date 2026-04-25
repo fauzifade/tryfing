@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — AbsensiIoT</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        body { display:flex; align-items:center; justify-content:center; min-height:100vh; }
+        .login-box { width:100%; max-width:380px; }
+        .login-logo { text-align:center; margin-bottom:32px; }
+        .login-logo .brand { font-size:20px; font-weight:700; letter-spacing:0.12em; color:var(--accent); }
+        .login-logo .sub { font-size:11px; color:var(--text-muted); letter-spacing:0.08em; margin-top:6px; }
+        .login-box .card { padding:28px; }
+    </style>
+</head>
+<body>
+<div class="login-box">
+    <div class="login-logo">
+        <div class="brand">AbsensiIoT</div>
+        <div class="sub">Sistem Absensi Sidik Jari</div>
+    </div>
+    <div class="card">
+        <div class="card-title">Masuk ke Sistem</div>
+        <div class="form-group" style="margin-bottom:12px">
+            <label>Username</label>
+            <input type="text" id="username" placeholder="Username" autocomplete="username">
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+            <label>Password</label>
+            <input type="password" id="password" placeholder="Password" autocomplete="current-password"
+                   onkeydown="if(event.key==='Enter') doLogin()">
+        </div>
+        <button class="btn-primary" onclick="doLogin()" id="btnLogin">Masuk</button>
+        <div id="notif" class="notif"></div>
+    </div>
+    <div style="text-align:center;margin-top:16px;font-size:11px;color:var(--text-muted)">
+        Default admin: <span style="color:var(--text)">Administrator</span> / <span style="color:var(--text)">admin123</span>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+// Jika sudah login, redirect langsung
+if (getToken()) {
+    window.location.href = isAdmin() ? '/dashboard.html' : '/profil.html';
+}
+
+async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    if (!username || !password) {
+        showNotif('notif', 'Username dan password wajib diisi!', true);
+        return;
+    }
+    const btn = document.getElementById('btnLogin');
+    btn.textContent = 'Memproses...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+            saveSession(data.token, data.user);
+            window.location.href = data.user.role_id === 1 ? '/dashboard.html' : '/profil.html';
+        } else {
+            showNotif('notif', data.message, true);
+            btn.textContent = 'Masuk';
+            btn.disabled = false;
+        }
+    } catch(e) {
+        showNotif('notif', 'Gagal menghubungi server!', true);
+        btn.textContent = 'Masuk';
+        btn.disabled = false;
+    }
+}
+</script>
+</body>
+</html>

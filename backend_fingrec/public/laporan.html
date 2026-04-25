@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Laporan — AbsensiIoT</title>
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<script src="api.js"></script>
+<script>requireAdmin(); renderNav('nav-laporan')</script>
+<div class="main">
+    <div class="page-title">Laporan Kehadiran</div>
+    <div class="card">
+        <div class="card-title">Filter Bulan</div>
+        <div class="form-row">
+            <div class="form-group">
+                <label>Bulan</label>
+                <input type="month" id="bulanInput">
+            </div>
+            <div class="form-group" style="flex:0.4;align-self:flex-end">
+                <button class="btn-primary" style="margin-top:0" onclick="muatLaporan()">Tampilkan</button>
+            </div>
+        </div>
+    </div>
+    <div id="statGrid" class="stat-grid" style="display:none">
+        <div class="stat-card"><div class="label">Total Hadir</div><div class="value green" id="stHadir">0</div></div>
+        <div class="stat-card"><div class="label">Total Terlambat</div><div class="value amber" id="stTerlambat">0</div></div>
+        <div class="stat-card"><div class="label">Total Izin</div><div class="value purple" id="stIzin">0</div></div>
+        <div class="stat-card"><div class="label">Total Alpha</div><div class="value red" id="stAlpha">0</div></div>
+    </div>
+    <div class="card">
+        <div class="card-title">Rekap Per Karyawan</div>
+        <table>
+            <thead><tr><th>Nama</th><th>Unit</th><th>Hadir</th><th>Terlambat</th><th>Menit Telat</th><th>Izin</th><th>Alpha</th><th>Kehadiran</th></tr></thead>
+            <tbody id="laporanBody"><tr class="loading-row"><td colspan="8">Pilih bulan lalu klik Tampilkan.</td></tr></tbody>
+        </table>
+    </div>
+</div>
+<script>
+const now = new Date();
+document.getElementById('bulanInput').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+
+async function muatLaporan() {
+    const bulan = document.getElementById('bulanInput').value;
+    if (!bulan) return;
+    const data = await apiGet(`/api/laporan?bulan=${bulan}`);
+    if (!data) return;
+    let totH=0,totT=0,totI=0,totA=0;
+    data.forEach(d=>{totH+=d.hadir||0;totT+=d.terlambat||0;totI+=d.izin||0;totA+=d.alpha||0;});
+    document.getElementById('stHadir').textContent=totH;
+    document.getElementById('stTerlambat').textContent=totT;
+    document.getElementById('stIzin').textContent=totI;
+    document.getElementById('stAlpha').textContent=totA;
+    document.getElementById('statGrid').style.display='grid';
+    const tbody=document.getElementById('laporanBody');
+    if(!data.length){tbody.innerHTML='<tr class="loading-row"><td colspan="8">Tidak ada data.</td></tr>';return;}
+    tbody.innerHTML=data.map(d=>{
+        const total=(d.hadir||0)+(d.terlambat||0)+(d.izin||0)+(d.alpha||0);
+        const pct=total>0?Math.round(((d.hadir||0)+(d.terlambat||0))/total*100):0;
+        const bc=pct>=80?'green':pct>=60?'amber':'red';
+        return `<tr>
+            <td>${d.nama}</td><td style="font-size:12px">${d.unit||'—'}</td>
+            <td><span class="badge ready">${d.hadir||0}</span></td>
+            <td><span class="badge amber">${d.terlambat||0}</span></td>
+            <td style="font-size:12px">${d.total_menit_telat>0?d.total_menit_telat+' mnt':'—'}</td>
+            <td><span class="badge purple">${d.izin||0}</span></td>
+            <td><span class="badge empty">${d.alpha||0}</span></td>
+            <td style="min-width:100px">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <div class="progress-wrap" style="flex:1"><div class="progress-bar ${bc}" style="width:${pct}%"></div></div>
+                    <span style="font-size:11px;color:var(--text-muted);min-width:32px">${pct}%</span>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+muatLaporan();
+</script>
+</body></html>

@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Format Memori — Absensi IoT</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <a class="logo" href="dashboard.html">⬡ TryFing</a>
+    <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <!-- <a href="control.html">Kontrol ESP32</a> -->
+        <a href="register.html">Register Jari</a>
+        <a href="restore.html">Restore Data</a>
+        <a href="format.html" class="active">Format Alat</a>
+        <a href="history.html">Riwayat Absensi</a>
+    </nav>
+</div>
+
+<div class="main">
+    <div class="page-title">Hapus Memori Alat</div>
+
+    <div class="card" style="border-color: var(--red);">
+        <div class="card-title" style="color: var(--red);">Bahaya: Format Memori</div>
+        <div class="form-group">
+            <label>Sensor ID</label>
+            <input type="text" id="sensorId" value="01">
+        </div>
+        <br>
+        <p style="color: var(--text-muted); font-size: 12px; margin-bottom: 15px;">
+            Menghapus <strong>SELURUH</strong> data sidik jari di memori alat ESP32. Data di database server akan tetap aman.
+        </p>
+        <button class="btn-danger" onclick="kirimDelete()">HAPUS SEMUA DATA DI ESP32</button>
+        <div id="notif" class="notif"></div>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+async function kirimDelete() {
+    if (!confirm('YAKIN ingin menghapus SEMUA data sidik jari di alat?')) return;
+
+    const sensorId = document.getElementById('sensorId').value.trim();
+    try {
+        const result = await apiPost('/api/command', { sensorId, action: 'delete_all' });
+        showNotif('notif', result.message, result.status !== 'success');
+    } catch (e) {
+        showNotif('notif', 'Gagal menghubungi server!', true);
+    }
+}
+</script>
+</body>
+</html>

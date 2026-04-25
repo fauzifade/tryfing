@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Riwayat Absensi — Absensi IoT</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="topbar">
+    <a class="logo" href="dashboard.html">⬡ TryFing</a>
+        <nav>
+        <a href="dashboard.html">Dashboard</a>
+        <!-- <a href="control.html">Kontrol ESP32</a> -->
+        <a href="register.html">Register Jari</a>
+        <a href="restore.html">Restore Data</a>
+        <a href="format.html">Format Alat</a>
+        <a href="history.html"  class="active">Riwayat Absensi</a>
+    </nav>
+</div>
+
+<div class="main">
+    <div class="page-title">Riwayat Absensi</div>
+
+    <div class="card">
+        <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>Log Masuk Terbaru</span>
+            <span id="lastUpdate" style="font-size:10px;color:var(--text-muted)">—</span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Unit</th>
+                    <th>NIY / UUID</th>
+                    <th>Status</th>
+                    <th>Waktu Absen</th>
+                </tr>
+            </thead>
+            <tbody id="historyBody">
+                <tr class="loading-row"><td colspan="5">Memuat data...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script src="api.js"></script>
+<script>
+async function muatHistory() {
+    try {
+        const rows = await apiGet('/api/users/history');
+        const tbody = document.getElementById('historyBody');
+        const lastUpdate = document.getElementById('lastUpdate');
+
+        lastUpdate.textContent = 'Update: ' + new Date().toLocaleTimeString('id-ID');
+
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr class="loading-row"><td colspan="5">Belum ada data absensi.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map(r => {
+            const statusBadge = r.status_nama
+                ? `<span class="badge info">${r.status_nama}</span>`
+                : '<span style="color:var(--text-muted);font-size:12px">—</span>';
+            return `<tr>
+                <td>${r.nama}</td>
+                <td style="font-size:12px">${r.unit || '—'}</td>
+                <td style="font-size:12px;color:var(--text-muted)">${r.niy || '—'}</td>
+                <td>${statusBadge}</td>
+                <td style="font-size:12px">${formatDate(r.created_at)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        console.error('Gagal memuat history:', e);
+    }
+}
+
+muatHistory();
+setInterval(muatHistory, 5000);
+</script>
+
+</body>
+</html>
