@@ -43,7 +43,7 @@ backend_fingrec/
 ### 1. Clone / Copy project
 ```bash
 cd ~/
-git clone <repo-url> backend_fingrec
+git clone <https://github.com/fauzifade/tryfing.git> backend_fingrec
 cd backend_fingrec
 ```
 
@@ -115,7 +115,7 @@ Buka browser: **http://localhost:3000**
 ### Hardware yang dibutuhkan
 | Komponen | Jumlah |
 |----------|--------|
-| ESP32 (board apapun) | 1 |
+| ESP32 | 1 |
 | Sensor Sidik Jari AS608 | 1 |
 | LCD 16x2 I2C (alamat 0x27) | 1 |
 | Buzzer aktif | 1 |

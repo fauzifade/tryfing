@@ -24,7 +24,6 @@ String topic_status;
 String topic_restore;     
 String topic_command;
 String topic_display;
-// topic_message DIHAPUS, semua disatukan ke topic_display
 String topic_sensorinfo;  
 String topic_slots;       
 
@@ -39,8 +38,6 @@ void updateTopics() {
   topic_sensorinfo  = "absensi/" + sid + "/sensorinfo";  
   topic_slots       = "absensi/" + sid + "/slots";       
 }
-
-
 
 // ====================== HARDWARE ======================
 WiFiClient espClient;
@@ -59,7 +56,7 @@ LiquidCrystal_I2C lcd(LCD_ADDRESS, LCD_COLUMNS, LCD_ROWS);
 
 bool isLoginMode = true;
 unsigned long lastReconnectAttempt = 0;
-unsigned long lastScanCooldown = 0; // [BARU] Variabel untuk jeda scan
+unsigned long lastScanCooldown = 0; 
 
 // ====================== LCD & BUZZER ======================
 void lcdPrint(String line1, String line2 = "") {
@@ -90,6 +87,14 @@ void buzzerGagal() {
 void buzzerNotif() {
   digitalWrite(BUZZER_PIN, HIGH); delay(50); digitalWrite(BUZZER_PIN, LOW);
 }
+
+// 👇 [BARU] HELPER UNTUK KEMBALI KE MODE LOGIN
+void kembalikanKeModeLogin() {
+  isLoginMode = true;
+  lastScanCooldown = millis(); // Reset cooldown biar aman
+  lcdPrint("Mode: LOGIN", "Tempelkan Jari");
+}
+// 👆 =========================================
 
 // ====================== LOAD & SAVE CONFIG ======================
 void loadConfig() {
@@ -123,7 +128,7 @@ void setupWiFiAndConfig() {
   WiFiManagerParameter param_mqtt_port  ("mqtt_port",   "MQTT Port",      mqtt_port_str, 6);
   WiFiManagerParameter param_mqtt_user  ("mqtt_user",   "MQTT Username",  mqtt_user,    32);
   WiFiManagerParameter param_mqtt_pass  ("mqtt_pass",   "MQTT Password",  mqtt_pass,    32);
-  // wm.resetSettings();
+  
   wm.addParameter(&param_sensor_id);
   wm.addParameter(&param_mqtt_server);
   wm.addParameter(&param_mqtt_port);
@@ -136,7 +141,6 @@ void setupWiFiAndConfig() {
   });
 
   lcdPrint("Connecting WiFi", "Please wait...");
-
   bool connected = wm.autoConnect("ESP_FingerRec", "Bismillah");
 
   if (!connected) {
@@ -190,8 +194,6 @@ void publishSlots() {
     lcdPrint("Gagal Kirim", "Buffer Penuh");
     buzzerGagal();
   }
-  delay(1500);
-  // Biarkan server yang mereset layar kembali via /display
 }
 
 // ====================== MQTT RECONNECT ======================
@@ -207,19 +209,18 @@ void mqttReconnect() {
     mqttClient.subscribe(topic_restore.c_str());
     mqttClient.subscribe(topic_command.c_str());
     mqttClient.subscribe(topic_display.c_str()); 
-    // topic_message dihapus dari sini
 
     lcdPrint("MQTT Connected", "ID: " + String(sensor_id));
     delay(1000);
 
     publishSensorInfo();
 
-    // Biarkan server yang mengirim perintah awal ke LCD
-    // Jika tidak ada server, bisa beri default lokal sementara
     if (isLoginMode) lcdPrint("Mode: LOGIN", "Tempelkan Jari");
     lastReconnectAttempt = 0;
   } else {
-    lcdPrint("MQTT Gagal", "Retry 5 detik...");
+    Serial.print("Gagal Connect, Status State: ");
+    Serial.println(mqttClient.state()); 
+    lcdPrint("MQTT Gagal", "Error: " + String(mqttClient.state()));
   }
 }
 
@@ -230,8 +231,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   msg.trim();
 
   // ------------------------------------------------
-  // TOPIC: /display — SATU TOPIK UNTUK SEMUA LAYAR
-  // Server WAJIB kirim format: {"line1":"Teks","line2":"Teks","buzzer":"sukses"}
+  // TOPIC: /display 
   // ------------------------------------------------
   if (String(topic) == topic_display) {
     JsonDocument doc;
@@ -240,31 +240,29 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       String line2  = doc["line2"]  | "";
       String buzzer = doc["buzzer"] | "";
       
-      lcdPrint(line1, line2); // Print mentah-mentah dari server
+      lcdPrint(line1, line2); 
 
       if      (buzzer == "sukses") buzzerSukses();
       else if (buzzer == "gagal")  buzzerGagal();
       else if (buzzer == "notif")  buzzerNotif();
-      else if (buzzer == "")       digitalWrite(BUZZER_PIN, LOW); // Diam
+      else if (buzzer == "")       digitalWrite(BUZZER_PIN, LOW); 
       
-      // LOGIKA RESET LAYAR SEKARANG DIKONTROL SERVER!
-      // ESP tidak otomatis kembali ke "Mode: LOGIN". 
-      // Server yang harus mem-publish "Mode: LOGIN" setelah delay beberapa detik.
+      // Untuk absensi biasa, biarkan Server NodeJS yang mereset layarnya via displayTimeouts
     }
   }
 
   // ------------------------------------------------
-  // TOPIC: /restore — terima template dari server
+  // TOPIC: /restore 
   // ------------------------------------------------
   else if (String(topic) == topic_restore) {
     JsonDocument doc;
     if (!deserializeJson(doc, msg)) {
       int targetId    = doc["template_id"];
       String hexTemp  = doc["template"];
-      isLoginMode = false; // Matikan scan sementara
+      isLoginMode = false; 
       lcdPrint("Restoring ID:" + String(targetId), "Please wait...");
       suntikTemplateKeSensor(targetId, hexTemp);
-      isLoginMode = true;  // Hidupkan lagi
+      isLoginMode = true;  
     }
   }
 
@@ -276,8 +274,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     if (deserializeJson(doc, msg)) return;
 
     String command = doc["command"] | "";
+    Serial.println(">>> Command masuk dari server: " + command); // [DEBUG]
 
-    // Matikan mode background scan agar tidak bentrok
+    // Matikan mode absen
     isLoginMode = false; 
 
     if (command == "register") {
@@ -296,17 +295,19 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       buzzerSukses();
       mqttClient.publish(topic_status.c_str(), "{\"status\":\"sukses\",\"message\":\"all data restored\"}");
     }
-    else if (command == "delete_all") {
-      lcdPrint("WARNING!", "Deleting ALL...");
-      delay(1000);
-      if (finger.emptyDatabase() == FINGERPRINT_OK) {
-        lcdPrint("Success!", "All Deleted");
-        buzzerSukses();
-      } else {
-        lcdPrint("Failed!", "Cannot Delete");
-        buzzerGagal();
-      }
-    }
+     else if (command == "delete_all") {
+  lcdPrint("WARNING!", "Deleting ALL...");
+  delay(1000);
+  if (finger.emptyDatabase() == FINGERPRINT_OK) {
+    lcdPrint("Success!", "All Deleted");
+    buzzerSukses();
+    mqttClient.publish(topic_status.c_str(), "{\"status\":\"sukses\",\"message\":\"deleted_all\"}"); // ← TAMBAH INI
+  } else {
+    lcdPrint("Failed!", "Cannot Delete");
+    buzzerGagal();
+    mqttClient.publish(topic_status.c_str(), "{\"status\":\"gagal\",\"message\":\"deleted_all\"}"); // ← TAMBAH INI
+  }
+}
     else if (command == "delete") {
       int targetId = doc["template_id"] | -1;
       if (targetId == -1) {
@@ -331,8 +332,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       publishSlots();
     }
 
-    // Nyalakan kembali mode background scan setelah semua command beres
-    isLoginMode = true; 
+    // 👇 [BARU] SETELAH SEMUA AKSI SELESAI, JEDA BENTAR TERUS RESET KE LOGIN
+    // delay(1000); 
+    kembalikanKeModeLogin();
   }
 }
 
@@ -348,17 +350,12 @@ int cariIdKosong() {
 void cekSidikJariContinuous() {
   if (finger.getImage() != FINGERPRINT_OK) return;
 
-  // [RAHASIA 1]: Kasih jeda 100ms biar kulit nempel sempurna di kaca!
   delay(100); 
 
-  // 2. Jepret ulang foto setelah jari mantap, lalu ubah ke template
   if (finger.getImage() != FINGERPRINT_OK) return; 
-  if (finger.image2Tz() != FINGERPRINT_OK) return; // Kalau miring/buram, silent retry (jangan ngeprint error)
+  if (finger.image2Tz() != FINGERPRINT_OK) return; 
 
-  // 3. Mulai pencocokan
   if (finger.fingerSearch() == FINGERPRINT_OK) {
-    
-    // === JARI COCOK ===
     int matchedId = finger.fingerID;
     buzzerNotif();
     
@@ -369,26 +366,23 @@ void cekSidikJariContinuous() {
     
     lastScanCooldown = millis(); 
 
-    // [RAHASIA 2]: Kunci loop! Mesin GA AKAN nge-scan lagi selama jari masih nempel.
-    // Ini anti double-scan paling ampuh.
     while (finger.getImage() == FINGERPRINT_OK) {
         delay(50);
-        mqttClient.loop(); // Biar koneksi ga putus pas jari ditahan
-    } // TIDAK ADA DELAY DI SINI. Sistem langsung menunggu perintah layar dari server.
+        mqttClient.loop(); 
+    } 
   } else {
-    // Jika sensor lokal tidak mengenali jari sama sekali
     lcdPrint("Miss Match", "Please retry");
     buzzerGagal();
-    delay(1000);
-    lcdPrint("Mode: LOGIN", "Tempelkan Jari");
+    // delay(1000);
+    kembalikanKeModeLogin(); // <-- Pake helper di sini juga biar rapi
   }
 }
 
 void prosesRegister(int id) {
   unsigned long t = millis(); bool ok1 = false;
   while (millis() - t < 15000) {
-    mqttClient.loop();   // Mencegah MQTT Disconnect
-    ArduinoOTA.handle(); // Mencegah OTA hang
+    mqttClient.loop();   
+    ArduinoOTA.handle(); 
     
     if (finger.getImage() == FINGERPRINT_OK && finger.image2Tz(1) == FINGERPRINT_OK) { ok1 = true; break; }
     delay(50);
@@ -397,17 +391,17 @@ void prosesRegister(int id) {
   if (!ok1) { 
     lcdPrint("Timeout!", "Batal Daftar"); 
     buzzerGagal(); 
-    return; // Langsung return, nanti server/ESP reset state otomatis
+    return; // Bakal keluar dari fungsi, ketemu delay 2.5s di bawah, trus reset ke login
   }
 
   lcdPrint("Angkat Jari", "Tempelkan Lagi"); 
   buzzerNotif(); 
-  delay(1500);
+  delay(1000);
 
   t = millis(); bool ok2 = false;
   while (millis() - t < 15000) {
-    mqttClient.loop();   // Mencegah MQTT Disconnect
-    ArduinoOTA.handle(); // Mencegah OTA hang
+    mqttClient.loop();   
+    ArduinoOTA.handle(); 
     
     if (finger.getImage() == FINGERPRINT_OK && finger.image2Tz(2) == FINGERPRINT_OK) { ok2 = true; break; }
     delay(50);
@@ -433,7 +427,7 @@ void kirimTemplateViaMQTT(int id) {
   if (finger.loadModel(id) != FINGERPRINT_OK || finger.getModel() != FINGERPRINT_OK) return;
   
   String templateHex = "";
-  templateHex.reserve(1024); // MENCEGAH MEMORY LEAK (Heap Fragmentation)
+  templateHex.reserve(1024); 
 
   uint32_t start = millis(); int count = 0;
   while (count < 512 && (millis() - start) < 3000) {
@@ -449,7 +443,6 @@ void kirimTemplateViaMQTT(int id) {
   String payload = "{\"template_id\":" + String(id) + ",\"template\":\"" + templateHex + "\"}";
   if (mqttClient.beginPublish(topic_register.c_str(), payload.length(), false)) {
     mqttClient.print(payload); mqttClient.endPublish();
-    // Beri tahu server, biarkan server yang reset layarnya
     lcdPrint("Selesai!", "Data Terkirim"); 
     buzzerSukses();
   } else {
@@ -513,6 +506,7 @@ void loop() {
   mqttReconnect();
   mqttClient.loop();
   
-if (isLoginMode && mqttClient.connected() && (millis() - lastScanCooldown > 3000)) {
-    cekSidikJariContinuous();}
+  if (isLoginMode && mqttClient.connected() && (millis() - lastScanCooldown > 1000)) {
+    cekSidikJariContinuous();
+  }
 }
