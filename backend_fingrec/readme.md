@@ -305,15 +305,39 @@ Dikirim setelah proses rekam jari selesai (2x tempel).
 ```
 
 #### `absensi/{id}/status`
-Dikirim sebagai laporan hasil operasi. Semua kemungkinan payload:
+Dikirim setelah setiap command selesai dieksekusi, baik sukses maupun gagal.
 
-| Kondisi | Payload |
-|---------|---------|
-| `delete` berhasil | `{"status":"sukses","message":"deleted","template_id":5}` |
-| `delete` gagal | `{"status":"gagal","message":"deleted","template_id":5}` |
-| `delete_all` berhasil | `{"status":"sukses","message":"deleted_all"}` |
-| `delete_all` gagal | `{"status":"gagal","message":"deleted_all"}` |
-| Restore selesai (`upload_done`) | `{"status":"sukses","message":"all data restored"}` |
+**Format:**
+```json
+{
+  "status": "success",
+  "command": "delete_all",
+  "message": "berhasil menghapus semua data"
+}
+```
+
+**Semua kemungkinan payload:**
+
+| Command | Status | Message |
+|---------|--------|---------|
+| `register` | `success` | `sidik jari berhasil didaftarkan` |
+| `register` | `fail` | `memori sensor penuh` |
+| `register` | `fail` | `timeout, jari tidak terdeteksi` |
+| `register` | `fail` | `timeout, jari kedua tidak terdeteksi` |
+| `register` | `fail` | `jari tidak cocok, gagal membuat model` |
+| `register` | `fail` | `gagal menyimpan ke sensor` |
+| `register` | `fail` | `gagal membaca template dari sensor` |
+| `register` | `fail` | `gagal upload template ke server` |
+| `delete` | `success` | `berhasil menghapus ID {x}` |
+| `delete` | `fail` | `template_id tidak valid` |
+| `delete` | `fail` | `gagal menghapus ID {x}` |
+| `delete_all` | `success` | `berhasil menghapus semua data` |
+| `delete_all` | `fail` | `gagal menghapus semua data` |
+| `get_slots` | `success` | `berhasil membaca slot memori` |
+| `get_slots` | `fail` | `gagal mengirim data slots` |
+| `get_sensor_id` | `success` | `berhasil membaca sensor ID` |
+| `upload_done` | `success` | `semua template berhasil direstore` |
+| `restore` (per template gagal) | `fail` | `gagal mengirim template ID {x}` |
 
 #### `absensi/{id}/slots`
 Dikirim sebagai balasan perintah `get_slots`.
