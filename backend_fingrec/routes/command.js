@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../config/db');
 const { setRegistrasiAktif } = require('../mqtt/handler');
-// Pastikan middleware lu bener importnya (sesuaikan kalau lu ga pake ini)
 const { authMiddleware, adminOnly } = require('../middleware/auth'); 
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
 let mqttClient = null;
 
 function setMqttClient(client) { mqttClient = client; }

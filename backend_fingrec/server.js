@@ -12,15 +12,21 @@ const izinRouter = require('./routes/izin');
 const app = express();
 const PORT = 3000;
 
-// ====================== MQTT ======================
 const mqttClient = mqtt.connect('mqtt://127.0.0.1', {
-    username: 'esp32user',
-    password: 'passwordku123',
-    clientId: 'NodeJS-Backend'
+    username: 'esp32client',
+    password: 'tryfinggas',
+    clientId: 'NodeJS-Backend-' + Math.random().toString(16).slice(2, 8) 
 });
+
+// 2. TAMBAHKAN LOG DEBUG INI SEBELUM setupMqttHandlers
+mqttClient.on('connect', () => {
+    console.log("🟢 [DEBUG] Backend BERHASIL connect ke MQTT Broker!");
+    // Paksa subscribe ke semua topik absensi untuk testing
+    mqttClient.subscribe('absensi/#'); 
+});
+
 setupMqttHandlers(mqttClient);
 setMqttClient(mqttClient);
-
 // ====================== EXPRESS ======================
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));

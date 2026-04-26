@@ -1,160 +1,161 @@
-<!DOCTYPE html>
-<html lang="id">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kontrol ESP32 — Absensi IoT</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
+    <!DOCTYPE html>
+    <html lang="id">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Kontrol ESP32 — Absensi IoT</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700&display=swap" rel="stylesheet">
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
 
-<div class="topbar">
-    <a class="logo" href="dashboard.html">⬡ AbsensiIoT</a>
-    <nav>
-        <a href="dashboard.html">Dashboard</a>
-        <a href="control.html" class="active">Kontrol ESP32</a>
-        <a href="register.html">Register Jari</a>
-        <a href="restore.html">Restore Data</a>
-        <a href="format.html">Format Alat</a>
-        <a href="history.html">Riwayat Absensi</a>
-    </nav>
-</div>
-
-<div class="main">
-    <div class="page-title">Kontrol Perangkat ESP32</div>
-
-    <div class="card">
-        <div class="card-title">Kirim Perintah</div>
-
-        <div class="form-row">
-            <div class="form-group">
-                <label>Sensor ID</label>
-                <input type="text" id="sensorId" value="01" placeholder="Misal: 01">
-            </div>
-            <div class="form-group">
-                <label>Aksi</label>
-                <select id="actionSelect" onchange="toggleInputs()">
-                    <option value="enroll">Daftarkan Jari Baru (Register)</option>
-                    <option value="get_slots">Cek Memori Mesin (Get Slots)</option>
-                    <option value="restore_all">Suntik Data Server ke Alat (Restore)</option>
-                    <option value="delete_all">Format Bersih Memori Alat (Delete All)</option>
-                </select>
-            </div>
-        </div>
-
-        <div class="form-row" id="niyGroup">
-            <div class="form-group">
-                <label>UUID / NIY Karyawan</label>
-                <input type="text" id="niyInput" placeholder="Misal: 2026001">
-            </div>
-        </div>
-        
-        <button id="btnSubmit" class="btn-primary" onclick="kirimPerintah()">Mulai Scan Jari (Register)</button>
-        <div id="notif" class="notif"></div>
+    <div class="topbar">
+        <a class="logo" href="dashboard.html">⬡ AbsensiIoT</a>
+        <nav>
+            <a href="dashboard.html">Dashboard</a>
+            <a href="control.html" class="active">Kontrol ESP32</a>
+            <a href="register.html">Register Jari</a>
+            <a href="restore.html">Restore Data</a>
+            <a href="format.html">Format Alat</a>
+            <a href="history.html">Riwayat Absensi</a>
+        </nav>
     </div>
 
-    <div class="card">
-        <div class="card-title">Panduan Aksi</div>
-        <table>
-            <thead>
-                <tr><th>Aksi</th><th>Keterangan</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><span class="badge info">Register</span></td>
-                    <td>Mendaftarkan sidik jari baru untuk karyawan. Pastikan karyawan sudah ada di database.</td>
-                </tr>
-                <tr>
-                    <td><span class="badge info">Get Slots</span></td>
-                    <td>Meminta ESP32 mengirimkan daftar ID sidik jari yang saat ini terisi di dalam mesinnya.</td>
-                </tr>
-                <tr>
-                    <td><span class="badge info">Restore</span></td>
-                    <td>Mengirim semua template sidik jari dari server ke memori alat ESP32. Gunakan setelah reset alat.</td>
-                </tr>
-                <tr>
-                    <td><span class="badge empty">Delete All</span></td>
-                    <td>Menghapus SEMUA data sidik jari di memori alat. Data di server tetap aman.</td>
-                </tr>
-            </tbody>
-        </table>
+    <div class="main">
+        <div class="page-title">Kontrol Perangkat ESP32</div>
+
+        <div class="card">
+            <div class="card-title">Kirim Perintah</div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Sensor ID</label>
+                    <input type="text" id="sensorId" value=1 placeholder="Misal: 01">
+                </div>
+                <div class="form-group">
+                    <label>Aksi</label>
+                    <select id="actionSelect" onchange="toggleInputs()">
+                        <option value="enroll">Daftarkan Jari Baru (Register)</option>
+                        <option value="get_slots">Cek Memori Mesin (Get Slots)</option>
+                        <option value="restore_all">Suntik Data Server ke Alat (Restore)</option>
+                        <option value="delete_all">Format Bersih Memori Alat (Delete All)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row" id="niyGroup">
+                <div class="form-group">
+                    <label>UUID / NIY Karyawan</label>
+                    <input type="text" id="niyInput" placeholder="Misal: 2026001">
+                </div>
+            </div>
+            
+            <button id="btnSubmit" class="btn-primary" onclick="kirimPerintah()">Mulai Scan Jari (Register)</button>
+            <div id="notif" class="notif"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">Panduan Aksi</div>
+            <table>
+                <thead>
+                    <tr><th>Aksi</th><th>Keterangan</th></tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><span class="badge info">Register</span></td>
+                        <td>Mendaftarkan sidik jari baru untuk karyawan. Pastikan karyawan sudah ada di database.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge info">Get Slots</span></td>
+                        <td>Meminta ESP32 mengirimkan daftar ID sidik jari yang saat ini terisi di dalam mesinnya.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge info">Restore</span></td>
+                        <td>Mengirim semua template sidik jari dari server ke memori alat ESP32. Gunakan setelah reset alat.</td>
+                    </tr>
+                    <tr>
+                        <td><span class="badge empty">Delete All</span></td>
+                        <td>Menghapus SEMUA data sidik jari di memori alat. Data di server tetap aman.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
 
-<script src="api.js"></script>
-<script>
-// Fungsi untuk mengubah tampilan form berdasarkan Aksi yang dipilih
-function toggleInputs() {
-    const action = document.getElementById('actionSelect').value;
-    const niyGroup = document.getElementById('niyGroup');
-    const btn = document.getElementById('btnSubmit');
+    <script src="api.js"></script>
+    <script>
+        requireAdmin(); // ← tambah ini
+    // Fungsi untuk mengubah tampilan form berdasarkan Aksi yang dipilih
+    function toggleInputs() {
+        const action = document.getElementById('actionSelect').value;
+        const niyGroup = document.getElementById('niyGroup');
+        const btn = document.getElementById('btnSubmit');
 
-    if (action === 'enroll') {
-        niyGroup.style.display = 'flex';
-        btn.className = 'btn-primary';
-        btn.textContent = 'Mulai Scan Jari (Register)';
-    } else if (action === 'get_slots') {
-        niyGroup.style.display = 'none';
-        btn.className = 'btn-primary';
-        btn.textContent = 'Minta Data Memori';
-    } else if (action === 'restore_all') {
-        niyGroup.style.display = 'none';
-        btn.className = 'btn-primary';
-        btn.textContent = 'Suntik Data ke ESP32';
-    } else if (action === 'delete_all') {
-        niyGroup.style.display = 'none';
-        btn.className = 'btn-danger';
-        btn.textContent = 'HAPUS SEMUA DATA DI ESP32';
-    }
-}
-
-// Fungsi untuk menembak API Backend
-async function kirimPerintah() {
-    const sensorId = document.getElementById('sensorId').value.trim();
-    const action = document.getElementById('actionSelect').value;
-    const niy = document.getElementById('niyInput').value.trim();
-
-    // Validasi form registrasi
-    if (action === 'enroll' && !niy) {
-        showNotif('notif', 'UUID / NIY tidak boleh kosong untuk registrasi!', true);
-        return;
-    }
-
-    // Validasi keamanan format memori
-    if (action === 'delete_all' && !confirm('YAKIN ingin menghapus SEMUA data sidik jari di alat?')) {
-        return;
-    }
-
-    // Ubah teks tombol jadi loading sementara
-    const btn = document.getElementById('btnSubmit');
-    const originalText = btn.textContent;
-    btn.textContent = 'Mengirim...';
-    btn.disabled = true;
-
-    try {
-        // Karena api.js lu udah nanganin fetch, kita tinggal panggil apiPost
-        const result = await apiPost('/api/command', { sensorId, action, niy });
-        
-        // Tampilkan notifikasi (hijau kalau sukses, merah kalau gagal)
-        showNotif('notif', result.message, result.status !== 'success');
-        
-        if (action === 'get_slots' && result.status === 'success') {
-            // Opsional: Kasih alert tambahan biar admin tau ngeceknya dimana
-            setTimeout(() => {
-                alert("Perintah terkirim! Silakan cek terminal/log backend Node.js Anda untuk melihat daftar ID yang terisi.");
-            }, 500);
+        if (action === 'enroll') {
+            niyGroup.style.display = 'flex';
+            btn.className = 'btn-primary';
+            btn.textContent = 'Mulai Scan Jari (Register)';
+        } else if (action === 'get_slots') {
+            niyGroup.style.display = 'none';
+            btn.className = 'btn-primary';
+            btn.textContent = 'Minta Data Memori';
+        } else if (action === 'restore_all') {
+            niyGroup.style.display = 'none';
+            btn.className = 'btn-primary';
+            btn.textContent = 'Suntik Data ke ESP32';
+        } else if (action === 'delete_all') {
+            niyGroup.style.display = 'none';
+            btn.className = 'btn-danger';
+            btn.textContent = 'HAPUS SEMUA DATA DI ESP32';
         }
-    } catch (e) {
-        showNotif('notif', 'Gagal menghubungi server!', true);
-    } finally {
-        // Balikin tombol seperti semula
-        btn.textContent = originalText;
-        btn.disabled = false;
     }
-}
-</script>
 
-</body>
-</html>
+    // Fungsi untuk menembak API Backend
+    async function kirimPerintah() {
+        const sensorId = document.getElementById('sensorId').value.trim();
+        const action = document.getElementById('actionSelect').value;
+        const niy = document.getElementById('niyInput').value.trim();
+
+        // Validasi form registrasi
+        if (action === 'enroll' && !niy) {
+            showNotif('notif', 'UUID / NIY tidak boleh kosong untuk registrasi!', true);
+            return;
+        }
+
+        // Validasi keamanan format memori
+        if (action === 'delete_all' && !confirm('YAKIN ingin menghapus SEMUA data sidik jari di alat?')) {
+            return;
+        }
+
+        // Ubah teks tombol jadi loading sementara
+        const btn = document.getElementById('btnSubmit');
+        const originalText = btn.textContent;
+        btn.textContent = 'Mengirim...';
+        btn.disabled = true;
+
+        try {
+            // Karena api.js lu udah nanganin fetch, kita tinggal panggil apiPost
+            const result = await apiPost('/api/command', { sensorId, action, niy });
+            
+            // Tampilkan notifikasi (hijau kalau sukses, merah kalau gagal)
+            showNotif('notif', result.message, result.status !== 'success');
+            
+            if (action === 'get_slots' && result.status === 'success') {
+                // Opsional: Kasih alert tambahan biar admin tau ngeceknya dimana
+                setTimeout(() => {
+                    alert("Perintah terkirim! Silakan cek terminal/log backend Node.js Anda untuk melihat daftar ID yang terisi.");
+                }, 500);
+            }
+        } catch (e) {
+            showNotif('notif', 'Gagal menghubungi server!', true);
+        } finally {
+            // Balikin tombol seperti semula
+            btn.textContent = originalText;
+            btn.disabled = false;
+        }
+    }
+    </script>
+
+    </body>
+    </html>

@@ -6,35 +6,38 @@ let sesiRegistrasiAktif_EmpId = null;
 const displayTimeouts = {};
 
 function setupMqttHandlers(mqttClient) {
+    console.log('✅ Server Backend yaping nigga');
     mqttClient.on('connect', () => {
         console.log('✅ Server Backend Terhubung ke MQTT Broker!');
         mqttClient.subscribe('absensi/+/login');
         mqttClient.subscribe('absensi/+/register');
         mqttClient.subscribe('absensi/+/status');
-        mqttClient.subscribe('absensi/+/slots'); // [BARU] Jangan lupa subscribe topik ini
+        mqttClient.subscribe('absensi/+/slots');
+        mqttClient.subscribe('absensi/+/sensorinfo');
     });
 
-    mqttClient.on('message', async (topic, message) => {
+mqttClient.on('message', async (topic, message) => {
         const payload = message.toString();
+        
+        // --- LOG JEJAK 1: PESAN MASUK ---
+        console.log(`\n======================================`);
+        console.log(`📍 [JEJAK 1] Terima Pesan! Topik: ${topic}`);
+        console.log(`📍 [JEJAK 2] Isi Payload: ${payload}`);
+
         const topicParts = topic.split('/');
         const sensorId = topicParts[1];
         const action = topicParts[2];
 
-        // ==========================================================
-        // FUNGSI INTI: KIRIM LAYAR & RESET OTOMATIS
-        // ==========================================================
+        // FUNGSI INTI: KIRIM LAYAR
         const sendToDisplay = (line1, line2, buzzer) => {
             const topicBalasan = `absensi/${sensorId}/display`;
-            
-            // 1. Kirim tampilan yang diminta sekarang
+            console.log(`📤 [KIRIM KE LCD] Eksekusi: ${line1} - ${line2}`);
             mqttClient.publish(topicBalasan, JSON.stringify({ line1, line2, buzzer }));
 
-            // 2. Clear timer yang lama (biar layarnya nggak kedap-kedip kalau ditekan berkali-kali)
             if (displayTimeouts[sensorId]) {
                 clearTimeout(displayTimeouts[sensorId]);
             }
 
-            // 3. Set timer baru: SETELAH 3 DETIK, KEMBALI KE MODE LOGIN!
             displayTimeouts[sensorId] = setTimeout(() => {
                 mqttClient.publish(topicBalasan, JSON.stringify({ 
                     line1: "Mode: LOGIN", 
@@ -45,14 +48,22 @@ function setupMqttHandlers(mqttClient) {
         };
 
         try {
-            if (!payload.startsWith('{')) return;
+            // --- LOG JEJAK 3: CEK FORMAT ---
+            if (!payload.startsWith('{')) {
+                console.log(`🛑 [STOP] Payload bukan JSON, proses dihentikan!`);
+                return;
+            }
+            
             const data = JSON.parse(payload);
+            console.log(`📍 [JEJAK 3] JSON Valid! Action: ${action}, Template ID: ${data.template_id || 'Tidak ada'}`);
 
             // ==========================================================
             // 1. ABSENSI (LOGIN)
             // ==========================================================
             if (action === 'login') {
                 const idJari = data.template_id;
+                
+                console.log(`📍 [JEJAK 4] Mulai Query Database MySQL untuk ID: ${idJari}...`);
 
                 const [rows] = await pool.query(
                     `SELECT e.id as emp_id, e.name 
@@ -61,6 +72,8 @@ function setupMqttHandlers(mqttClient) {
                      WHERE f.server_id = ?`,
                     [idJari]
                 );
+
+                console.log(`📍 [JEJAK 5] Query MySQL Selesai! Hasil: ${rows.length} data ditemukan.`);
 
                 if (rows.length > 0) {
                     const pegawai = rows[0];
