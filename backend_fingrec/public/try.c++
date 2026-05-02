@@ -58,6 +58,9 @@ bool isLoginMode = true;
 unsigned long lastReconnectAttempt = 0;
 unsigned long lastScanCooldown = 0;
 
+unsigned long timerResetLCD = 0;
+bool butuhResetLCD = false;
+
 // ====================== LCD & BUZZER ======================
 void lcdPrint(String line1, String line2 = "") {
   lcd.clear();
@@ -255,6 +258,9 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       else if (buzzer == "gagal")  buzzerGagal();
       else if (buzzer == "notif")  buzzerNotif();
       else if (buzzer == "")       digitalWrite(BUZZER_PIN, LOW);
+
+      timerResetLCD = millis();
+      butuhResetLCD = true;
     }
   }
 
@@ -395,6 +401,7 @@ void cekSidikJariContinuous() {
       delay(50);
       mqttClient.loop();
     }
+    kembalikanKeModeLogin();
   } else {
     lcdPrint("Miss Match", "Please retry");
     buzzerGagal();
@@ -551,4 +558,12 @@ void loop() {
   if (isLoginMode && mqttClient.connected() && (millis() - lastScanCooldown > 1000)) {
     cekSidikJariContinuous();
   }
+
+    if (isLoginMode && butuhResetLCD && (millis() - timerResetLCD > 3000)) {
+      delay(100);
+    kembalikanKeModeLogin();
+    butuhResetLCD = false; // matikan alarm
+  }
 }
+
+
